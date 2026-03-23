@@ -64,30 +64,125 @@ productApi.MapGet("/", async (IProductRepository repo) =>
 productApi.MapGet("/{id}",
         async Task<Results<Ok<Product>, NotFound>> (string id, IProductRepository repo) =>
         {
-            Guid guid = Guid.Parse(id);
+            if (!Guid.TryParse(id, out var guid))
+            {
+                return TypedResults.NotFound();
+            }
+
             return await repo.GetById(guid) is { } product
             ? TypedResults.Ok(product)
             : TypedResults.NotFound();
         })
     .WithName("GetProductById");
 
-productApi.MapPut("/new",
-        async Task<Results<Ok, BadRequest>> (string name, AppDbContext db) =>
+productApi.MapPost("/",
+        async Task<Results<Created<Product>, ValidationProblem>>
+        (CreateProductRequest request, IProductRepository repo, AppDbContext db) =>
         {
-            if (string.IsNullOrWhiteSpace(name)
-                || await db.Products
-                    .FirstOrDefaultAsync(p => p.Name == name) is { } _)
+            if (string.IsNullOrWhiteSpace(request.Name))
             {
-                return TypedResults.BadRequest();
+                return TypedResults.ValidationProblem(new Dictionary<string, string[]>
+                {
+                    ["name"] = ["Name is required."]
+                });
             }
-            else
+
+            if (request.Price < 0)
             {
-                await db.Products.AddAsync(new Product { Name = name });
-                await db.SaveChangesAsync();
-                return TypedResults.Ok();
+                return TypedResults.ValidationProblem(new Dictionary<string, string[]>
+                {
+                    ["price"] = ["Price must be 0 or greater."]
+                });
             }
+
+            if (await db.Products.AnyAsync(p => p.Name == request.Name.Trim()))
+            {
+                return TypedResults.ValidationProblem(new Dictionary<string, string[]>
+                {
+                    ["name"] = ["A product with this name already exists."]
+                });
+            }
+
+            var product = new Product
+            {
+                Name = request.Name.Trim(),
+                Price = request.Price,
+                Barcode = request.Barcode?.Trim() ?? string.Empty,
+                Description = request.Description?.Trim() ?? string.Empty,
+            };
+
+            await repo.Create(product);
+
+            return TypedResults.Created($"/api/products/{product.Id}", product);
         })
     .WithName("CreateProduct");
+
+productApi.MapPut("/{id}",
+        async Task<Results<Ok<Product>, NotFound, ValidationProblem>>
+        (string id, UpdateProductRequest request, IProductRepository repo, AppDbContext db) =>
+        {
+            if (!Guid.TryParse(id, out var guid))
+            {
+                return TypedResults.NotFound();
+            }
+
+            var existing = await repo.GetById(guid);
+            if (existing is null)
+            {
+                return TypedResults.NotFound();
+            }
+
+            if (string.IsNullOrWhiteSpace(request.Name))
+            {
+                return TypedResults.ValidationProblem(new Dictionary<string, string[]>
+                {
+                    ["name"] = ["Name is required."]
+                });
+            }
+
+            if (request.Price < 0)
+            {
+                return TypedResults.ValidationProblem(new Dictionary<string, string[]>
+                {
+                    ["price"] = ["Price must be 0 or greater."]
+                });
+            }
+
+            if (await db.Products.AnyAsync(p => p.Id != guid && p.Name == request.Name.Trim()))
+            {
+                return TypedResults.ValidationProblem(new Dictionary<string, string[]>
+                {
+                    ["name"] = ["A product with this name already exists."]
+                });
+            }
+
+            existing.Name = request.Name.Trim();
+            existing.Price = request.Price;
+            existing.Barcode = request.Barcode?.Trim() ?? string.Empty;
+            existing.Description = request.Description?.Trim() ?? string.Empty;
+
+            await repo.Update(existing);
+            return TypedResults.Ok(existing);
+        })
+    .WithName("UpdateProduct");
+
+productApi.MapDelete("/{id}",
+        async Task<Results<NoContent, NotFound>> (string id, IProductRepository repo) =>
+        {
+            if (!Guid.TryParse(id, out var guid))
+            {
+                return TypedResults.NotFound();
+            }
+
+            if (await repo.GetById(guid) is null)
+            {
+                return TypedResults.NotFound();
+            }
+
+            await repo.Delete(guid);
+            return TypedResults.NoContent();
+        })
+    .WithName("DeleteProduct");
 
 var warehousesApi = app.MapGroup("/api/warehouses");
 warehousesApi.MapGet("/", async (AppDbContext db) =>
@@ -142,6 +237,20 @@ app.Run();
 [JsonSerializable(typeof(Transaction))]
 [JsonSerializable(typeof(InventoryItem))]
 [JsonSerializable(typeof(TransactionLine))]
+[JsonSerializable(typeof(CreateProductRequest))]
+[JsonSerializable(typeof(UpdateProductRequest))]
 internal partial class AppJsonSerializerContext : JsonSerializerContext
 {
 }
+
+internal sealed record CreateProductRequest(
+    string Name,
+    decimal Price,
+    string? Barcode,
+    string? Description);
+
+internal sealed record UpdateProductRequest(
+    string Name,
+    decimal Price,
+    string? Barcode,
+    string? Description);

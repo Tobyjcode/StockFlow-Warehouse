@@ -1,9 +1,12 @@
-namespace StockFlow_Warehouse.Model;
-
+using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
+using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 
+namespace StockFlow_Warehouse.Model;
+
 // TODO: Use compiled model so we can enable AOT and Trimming on publish
-public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(options)
+public class AppDbContext(DbContextOptions<AppDbContext> options)
+    : IdentityDbContext<IdentityUser, IdentityRole, string>(options)
 {
     public DbSet<Category> Categories { get; set; }
     public DbSet<Product> Products { get; set; }
@@ -12,43 +15,61 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
     public DbSet<InventoryItem> InventoryItems { get; set; }
     public DbSet<TransactionLine> TransactionLines { get; set; }
 
-    protected override void OnModelCreating(ModelBuilder modelBuilder)
+    public static async Task SeedRolesAsync(IServiceProvider serviceProvider)
     {
-        modelBuilder.Entity<Transaction>()
+        var roleManager = serviceProvider.GetRequiredService<RoleManager<IdentityRole>>();
+
+        string[] roleNames = ["ReadOnly", "Employee", "Manager", "Admin"];
+
+        foreach (var roleName in roleNames)
+        {
+            var roleExist = await roleManager.RoleExistsAsync(roleName);
+            if (!roleExist)
+            {
+                await roleManager.CreateAsync(new IdentityRole(roleName));
+            }
+        }
+    }
+
+    protected override void OnModelCreating(ModelBuilder builder)
+    {
+        builder.Entity<Transaction>()
             .HasOne(t => t.From)
             .WithMany()
             .HasForeignKey(t => t.FromId)
             .OnDelete(DeleteBehavior.Restrict);
 
-        modelBuilder.Entity<Transaction>()
+        builder.Entity<Transaction>()
             .HasOne(t => t.To)
             .WithMany()
             .HasForeignKey(t => t.ToId)
             .OnDelete(DeleteBehavior.Restrict);
 
-        modelBuilder.Entity<Transaction>()
+        builder.Entity<Transaction>()
             .HasMany(t => t.LineItems)
             .WithOne(li => li.Transaction)
             .HasForeignKey(li => li.TransactionId);
 
-        modelBuilder.Entity<TransactionLine>()
+        builder.Entity<TransactionLine>()
             .HasOne(t => t.Product)
             .WithMany()
             .HasForeignKey(t => t.ProductId);
 
-        modelBuilder.Entity<Product>()
+        builder.Entity<Product>()
             .HasMany(p => p.Categories)
             .WithMany(c => c.Products);
 
-        modelBuilder.Entity<Recipient>()
+        builder.Entity<Recipient>()
             .HasMany(w => w.Inventory)
             .WithOne(w => w.Warehouse)
             .HasForeignKey(i => i.WarehouseId);
 
-        modelBuilder.Entity<InventoryItem>()
+        builder.Entity<InventoryItem>()
             .HasOne(i => i.Product)
             .WithMany()
             .HasForeignKey(i => i.ProductId);
+        
+        base.OnModelCreating(builder);
     }
 
     public async Task SeedDataAsync()

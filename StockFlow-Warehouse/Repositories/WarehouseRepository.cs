@@ -4,32 +4,26 @@ using Microsoft.EntityFrameworkCore;
 using StockFlow_Warehouse.Repositories;
 using StockFlow_Warehouse.Model;
 
-public class WarehouseRepository : IWarehouseRepository
+public class WarehouseRepository(AppDbContext db) : IWarehouseRepository
 {
-    private readonly AppDbContext _db;
-
-    public WarehouseRepository(AppDbContext db)
-    {
-        _db = db;
-    }
-
-    private IQueryable<Warehouse> WithIncludes() =>
-        _db.Warehouses
-            .Include(w => w.Products)
+    private IQueryable<Recipient> WithIncludes() =>
+        db.Recipients
+            .Where(r => r.Type == RecipientType.Warehouse)
+            .Include(w => w.Inventory)
                 .ThenInclude(pa => pa.Product)
                     .ThenInclude(p => p.Categories);
 
-    public Task<List<Warehouse>> GetAll() =>
+    public Task<List<Recipient>> GetAll() =>
         WithIncludes().ToListAsync();
 
-    public Task<Warehouse?> GetById(Guid id) =>
+    public Task<Recipient?> GetById(Guid id) =>
         WithIncludes().FirstOrDefaultAsync(a
             => a.Id == id);
 
-    public async Task Create(Warehouse warehouse)
+    public async Task Create(Recipient warehouse)
     {
-        await _db.AddAsync(warehouse).AsTask();
-        await _db.SaveChangesAsync();
+        await db.AddAsync(warehouse).AsTask();
+        await db.SaveChangesAsync();
     }
 
     public async Task Delete(Guid id)
@@ -37,19 +31,19 @@ public class WarehouseRepository : IWarehouseRepository
         var product = await GetById(id);
         if (product != null)
         {
-            _db.Remove(product);
-            await _db.SaveChangesAsync();
+            db.Remove(product);
+            await db.SaveChangesAsync();
         }
     }
 
-    public async Task Update(Warehouse warehouse)
+    public async Task Update(Recipient warehouse)
     {
         Guid id = warehouse.Id;
         var dbProduct = await GetById(id);
         if (dbProduct != null)
         {
-            _db.Entry(dbProduct).CurrentValues.SetValues(warehouse);
-            await _db.SaveChangesAsync();
+            db.Entry(dbProduct).CurrentValues.SetValues(warehouse);
+            await db.SaveChangesAsync();
         }
     }
 }

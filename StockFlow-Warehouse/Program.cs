@@ -24,15 +24,15 @@ builder.Services.AddOpenApi();
 // TODO: fetch username/password or token from environment variables instead of storing them in plaintext
 builder.Services.AddDbContext<AppDbContext>(options =>
     options.UseSqlite(builder.Configuration.GetConnectionString("SQLite")));
-builder.Services.AddDbContext<UserDbContext>( 
-    options => options.UseSqlite(builder.Configuration.GetConnectionString("SQLite")));
 
 builder.Services.AddAuthorization();
 builder.Services.AddAuthentication();
 builder.Services.AddIdentityApiEndpoints<IdentityUser>()
     .AddRoles<IdentityRole>()
-    .AddEntityFrameworkStores<UserDbContext>()
+    .AddEntityFrameworkStores<AppDbContext>()
     .AddDefaultTokenProviders();
+
+builder.Services.AddScoped<IProductRepository, ProductRepository>();
 
 var app = builder.Build();
 
@@ -48,13 +48,11 @@ if (app.Environment.IsDevelopment())
 using (var scope = app.Services.CreateScope())
 {
     var context = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-    var idContext = scope.ServiceProvider.GetRequiredService<UserDbContext>();
     if (app.Environment.IsDevelopment())
         await context.Database.EnsureDeletedAsync();
-    await idContext.Database.MigrateAsync();
     await context.Database.MigrateAsync();
     await context.SeedDataAsync();
-    await idContext.SeedRolesAsync(scope.ServiceProvider);
+    await AppDbContext.SeedRolesAsync(scope.ServiceProvider);
 }
 
 var productApi = app.MapGroup("/api/products");
@@ -63,7 +61,8 @@ productApi.MapGet("/", async (IProductRepository repo) =>
     .WithName("GetProducts");
 
 
-productApi.MapGet("/{id}", async Task<Results<Ok<Product>, NotFound>> (string id, IProductRepository repo) =>
+productApi.MapGet("/{id}",
+        async Task<Results<Ok<Product>, NotFound>> (string id, IProductRepository repo) =>
         {
             Guid guid = Guid.Parse(id);
             return await repo.GetById(guid) is { } product
@@ -71,6 +70,24 @@ productApi.MapGet("/{id}", async Task<Results<Ok<Product>, NotFound>> (string id
             : TypedResults.NotFound();
         })
     .WithName("GetProductById");
+
+productApi.MapPut("/new",
+        async Task<Results<Ok, BadRequest>> (string name, AppDbContext db) =>
+        {
+            if (string.IsNullOrWhiteSpace(name)
+                || await db.Products
+                    .FirstOrDefaultAsync(p => p.Name == name) is { } _)
+            {
+                return TypedResults.BadRequest();
+            }
+            else
+            {
+                await db.Products.AddAsync(new Product { Name = name });
+                await db.SaveChangesAsync();
+                return TypedResults.Ok();
+            }
+        })
+    .WithName("CreateProduct");
 
 var warehousesApi = app.MapGroup("/api/warehouses");
 warehousesApi.MapGet("/", async (AppDbContext db) =>
@@ -92,13 +109,14 @@ warehousesApi.MapGet("/{id}", async Task<Results<Ok<Recipient>, NotFound>> (stri
     .WithName("GetWarehouseById");
 
 var transactionsApi = app.MapGroup("/api/transactions");
-transactionsApi.MapGet("/", async (AppDbContext db) =>
+transactionsApi.MapGet("/", async Task<Results<Ok<List<Transaction>>, UnauthorizedHttpResult>> (AppDbContext db) =>
         await db.Transactions
             .Include(t => t.LineItems)
             .ThenInclude(l => l.Product)
-            .ToListAsync())
-    .WithName("GetTransactions")
-    .RequireAuthorization();
+            .ToListAsync() is { } transactions 
+            ? TypedResults.Ok(transactions) : TypedResults.Unauthorized())
+    .RequireAuthorization()
+    .WithName("GetTransactions");
 
 transactionsApi.MapGet("/orders", async (AppDbContext db) =>
         await db.Transactions
@@ -107,6 +125,14 @@ transactionsApi.MapGet("/orders", async (AppDbContext db) =>
             .ThenInclude(l => l.Product)
             .ToListAsync())
     .WithName("GetOrders");
+
+transactionsApi.MapDelete("/{id}", async Task<Results<Ok, NotFound>> (string id, AppDbContext db) =>
+    await db.Transactions
+        .Where(t => t.Id.ToString() == id)
+        .FirstOrDefaultAsync()
+        is not null ? TypedResults.Ok() : TypedResults.NotFound())
+    .RequireAuthorization()
+    .WithName("DeleteTransaction");
 
 app.Run();
 

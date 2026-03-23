@@ -4,10 +4,10 @@ using StockFlow_Warehouse.Model;
 
 public interface IWarehouseRepository
 {
-    Task<List<Warehouse>> GetAll();
-    Task<Warehouse> GetById(Guid id);
-    Task Create(Warehouse warehouse);
+    Task<List<Recipient>> GetAll();
+    Task<Recipient> GetById(Guid id);
+    Task Create(Recipient warehouse);
     Task Delete(Guid id);
-    Task Update(Warehouse warehouse);
+    Task Update(Recipient warehouse);
 
 }

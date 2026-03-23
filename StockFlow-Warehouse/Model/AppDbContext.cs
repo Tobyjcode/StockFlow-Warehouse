@@ -31,6 +31,43 @@ public class AppDbContext(DbContextOptions<AppDbContext> options)
         }
     }
 
+    public static async Task SeedDemoUsersAsync(IServiceProvider serviceProvider)
+    {
+        var userManager = serviceProvider.GetRequiredService<UserManager<IdentityUser>>();
+
+        var demoUsers = new[]
+        {
+            new { Email = "admin@stockflow.local", Password = "Admin123!", Role = "Admin" },
+            new { Email = "manager@stockflow.local", Password = "Manager123!", Role = "Manager" },
+            new { Email = "employee@stockflow.local", Password = "Employee123!", Role = "Employee" }
+        };
+
+        foreach (var demoUser in demoUsers)
+        {
+            var user = await userManager.FindByEmailAsync(demoUser.Email);
+            if (user is null)
+            {
+                user = new IdentityUser
+                {
+                    UserName = demoUser.Email,
+                    Email = demoUser.Email,
+                    EmailConfirmed = true
+                };
+
+                var createResult = await userManager.CreateAsync(user, demoUser.Password);
+                if (!createResult.Succeeded)
+                {
+                    continue;
+                }
+            }
+
+            if (!await userManager.IsInRoleAsync(user, demoUser.Role))
+            {
+                await userManager.AddToRoleAsync(user, demoUser.Role);
+            }
+        }
+    }
+
     protected override void OnModelCreating(ModelBuilder builder)
     {
         builder.Entity<Transaction>()

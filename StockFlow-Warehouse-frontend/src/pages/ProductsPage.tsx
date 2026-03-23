@@ -13,6 +13,7 @@ export default function ProductsPage() {
   const [items, setItems] = useState<Product[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [authRequired, setAuthRequired] = useState(false)
   const [submitting, setSubmitting] = useState(false)
 
   const [name, setName] = useState('')
@@ -25,6 +26,10 @@ export default function ProductsPage() {
   const [maxPrice, setMaxPrice] = useState('')
   const [sort, setSort] = useState<'name' | 'price'>('name')
   const [dir, setDir] = useState<'asc' | 'desc'>('asc')
+
+  function isAuthError(err: unknown) {
+    return err instanceof Error && (err.message.startsWith('Unauthorized') || err.message.startsWith('Forbidden'))
+  }
 
   function buildProductsUrl() {
     const params = new URLSearchParams()
@@ -44,8 +49,10 @@ export default function ProductsPage() {
       const data = await getJson<Product[]>(buildProductsUrl())
       setItems(data)
       setError(null)
+      setAuthRequired(false)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Unknown error')
+      setAuthRequired(isAuthError(err))
     }
   }
 
@@ -88,8 +95,10 @@ export default function ProductsPage() {
       setPrice('0')
       setBarcode('')
       setDescription('')
+      setAuthRequired(false)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Unknown error')
+      setAuthRequired(isAuthError(err))
     } finally {
       setSubmitting(false)
     }
@@ -111,8 +120,10 @@ export default function ProductsPage() {
       const data = await getJson<Product[]>('/api/products?sort=name&dir=asc')
       setItems(data)
       setError(null)
+      setAuthRequired(false)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Unknown error')
+      setAuthRequired(isAuthError(err))
     }
   }
 
@@ -122,8 +133,10 @@ export default function ProductsPage() {
     try {
       await deleteJson(`/api/products/${productId}`)
       setItems(prev => prev.filter(p => p.id !== productId))
+      setAuthRequired(false)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Unknown error')
+      setAuthRequired(isAuthError(err))
     }
   }
 
@@ -134,6 +147,7 @@ export default function ProductsPage() {
       <h2>Products</h2>
 
       {error ? <p>Could not complete request: {error}</p> : null}
+      {authRequired ? <p>Please log in on the Auth page to create, edit, or delete products.</p> : null}
 
       <form className="product-filters" onSubmit={handleApplyFilters}>
         <input

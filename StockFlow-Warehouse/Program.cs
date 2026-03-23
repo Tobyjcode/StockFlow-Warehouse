@@ -25,7 +25,11 @@ builder.Services.AddOpenApi();
 builder.Services.AddDbContext<AppDbContext>(options =>
     options.UseSqlite(builder.Configuration.GetConnectionString("SQLite")));
 
-builder.Services.AddAuthorization();
+builder.Services.AddAuthorization(options =>
+{
+    options.AddPolicy("ManagerOrAdmin", policy =>
+        policy.RequireRole("Manager", "Admin"));
+});
 builder.Services.AddAuthentication();
 builder.Services.AddIdentityApiEndpoints<IdentityUser>()
     .AddRoles<IdentityRole>()
@@ -45,6 +49,9 @@ if (app.Environment.IsDevelopment())
     app.MapScalarApiReference();
 }
 
+app.UseAuthentication();
+app.UseAuthorization();
+
 using (var scope = app.Services.CreateScope())
 {
     var context = scope.ServiceProvider.GetRequiredService<AppDbContext>();
@@ -53,6 +60,7 @@ using (var scope = app.Services.CreateScope())
     await context.Database.MigrateAsync();
     await context.SeedDataAsync();
     await AppDbContext.SeedRolesAsync(scope.ServiceProvider);
+    await AppDbContext.SeedDemoUsersAsync(scope.ServiceProvider);
 }
 
 var productApi = app.MapGroup("/api/products");
@@ -170,6 +178,7 @@ productApi.MapPost("/",
 
             return TypedResults.Created($"/api/products/{product.Id}", product);
         })
+    .RequireAuthorization("ManagerOrAdmin")
     .WithName("CreateProduct");
 
 productApi.MapPut("/{id}",
@@ -219,6 +228,7 @@ productApi.MapPut("/{id}",
             await repo.Update(existing);
             return TypedResults.Ok(existing);
         })
+    .RequireAuthorization("ManagerOrAdmin")
     .WithName("UpdateProduct");
 
 productApi.MapDelete("/{id}",
@@ -237,6 +247,7 @@ productApi.MapDelete("/{id}",
             await repo.Delete(guid);
             return TypedResults.NoContent();
         })
+    .RequireAuthorization("ManagerOrAdmin")
     .WithName("DeleteProduct");
 
 var warehousesApi = app.MapGroup("/api/warehouses");
@@ -366,6 +377,7 @@ transactionsApi.MapPost("/orders",
 
             return TypedResults.Created($"/api/transactions/{transaction.Id}", transaction);
         })
+    .RequireAuthorization("ManagerOrAdmin")
     .WithName("CreateOrder");
 
 transactionsApi.MapDelete("/{id}", async Task<Results<Ok, NotFound>> (string id, AppDbContext db) =>
@@ -373,7 +385,7 @@ transactionsApi.MapDelete("/{id}", async Task<Results<Ok, NotFound>> (string id,
         .Where(t => t.Id.ToString() == id)
         .FirstOrDefaultAsync()
         is not null ? TypedResults.Ok() : TypedResults.NotFound())
-    .RequireAuthorization()
+    .RequireAuthorization("ManagerOrAdmin")
     .WithName("DeleteTransaction");
 
 app.Run();

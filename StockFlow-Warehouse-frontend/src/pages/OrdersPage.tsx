@@ -55,6 +55,7 @@ export default function OrdersPage() {
   const [recipients, setRecipients] = useState<Recipient[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [authRequired, setAuthRequired] = useState(false)
   const [submitting, setSubmitting] = useState(false)
 
   const [selectedWarehouse, setSelectedWarehouse] = useState('')
@@ -63,6 +64,10 @@ export default function OrdersPage() {
   const [lineItems, setLineItems] = useState<LineItemInput[]>([
     { productId: '', amount: 1 },
   ])
+
+  function isAuthError(err: unknown) {
+    return err instanceof Error && (err.message.startsWith('Unauthorized') || err.message.startsWith('Forbidden'))
+  }
 
   useEffect(() => {
     async function load() {
@@ -143,8 +148,10 @@ export default function OrdersPage() {
       setOrders(prev => [created, ...prev])
       setLineItems([{ productId: '', amount: 1 }])
       setTrackingNumber('')
+      setAuthRequired(false)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Unknown error')
+      setAuthRequired(isAuthError(err))
     } finally {
       setSubmitting(false)
     }
@@ -160,6 +167,7 @@ export default function OrdersPage() {
       <h2>Orders</h2>
 
       {error ? <p className="error">{error}</p> : null}
+      {authRequired ? <p className="error">Please log in on the Auth page before creating orders.</p> : null}
 
       <form className="order-form" onSubmit={handleCreateOrder}>
         <h3>Create Order</h3>

@@ -364,3 +364,42 @@ a {
   color: #dc2626;
   border: 1px solid #fecaca;
 }
+
+.auth-page {
+  display: grid;
+  gap: 12px;
+}
+
+.auth-form {
+  display: grid;
+  gap: 8px;
+  max-width: 420px;
+}
+
+.auth-form input,
+.auth-form button {
+  font: inherit;
+  padding: 8px 10px;
+  border-radius: 8px;
+  border: 1px solid #d1d5db;
+}
+
+.auth-form button {
+  cursor: pointer;
+  background: #2563eb;
+  color: white;
+  border-color: #1d4ed8;
+}
+
+.auth-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.auth-message {
+  padding: 10px;
+  border-radius: 6px;
+  background: #dcfce7;
+  border: 1px solid #86efac;
+  color: #166534;
+}

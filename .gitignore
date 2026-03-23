@@ -488,3 +488,7 @@ $RECYCLE.BIN/
 *.db
 *.db-wal
 *.db-shm
+
+# Project-specific generated output
+_buildcheck/
+StockFlow-Warehouse-frontend/dist/

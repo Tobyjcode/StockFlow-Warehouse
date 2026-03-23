@@ -221,6 +221,98 @@ transactionsApi.MapGet("/orders", async (AppDbContext db) =>
             .ToListAsync())
     .WithName("GetOrders");
 
+transactionsApi.MapPost("/orders",
+        async Task<Results<Created<Transaction>, ValidationProblem, NotFound>>
+        (CreateOrderRequest request, AppDbContext db) =>
+        {
+            if (request.LineItems.Count == 0)
+            {
+                return TypedResults.ValidationProblem(new Dictionary<string, string[]>
+                {
+                    ["lineItems"] = ["At least one line item is required."]
+                });
+            }
+
+            var fromWarehouse = await db.Recipients
+                .Where(r => r.Type == RecipientType.Warehouse)
+                .Include(r => r.Inventory)
+                .ThenInclude(i => i.Product)
+                .FirstOrDefaultAsync(r => r.Id == request.FromWarehouseId);
+
+            if (fromWarehouse is null)
+            {
+                return TypedResults.NotFound();
+            }
+
+            var toRecipient = await db.Recipients
+                .FirstOrDefaultAsync(r => r.Id == request.ToRecipientId);
+
+            if (toRecipient is null)
+            {
+                return TypedResults.NotFound();
+            }
+
+            var mergedLineItems = request.LineItems
+                .GroupBy(li => li.ProductId)
+                .Select(g => new OrderLineRequest(g.Key, g.Sum(li => li.Amount)))
+                .ToList();
+
+            if (mergedLineItems.Any(li => li.Amount <= 0))
+            {
+                return TypedResults.ValidationProblem(new Dictionary<string, string[]>
+                {
+                    ["lineItems"] = ["Amount must be greater than 0 for all line items."]
+                });
+            }
+
+            foreach (var line in mergedLineItems)
+            {
+                var stockItem = fromWarehouse.Inventory
+                    .FirstOrDefault(i => i.ProductId == line.ProductId);
+
+                if (stockItem is null)
+                {
+                    return TypedResults.ValidationProblem(new Dictionary<string, string[]>
+                    {
+                        ["lineItems"] = [$"Product {line.ProductId} is not in warehouse inventory."]
+                    });
+                }
+
+                if (stockItem.Quantity < line.Amount)
+                {
+                    return TypedResults.ValidationProblem(new Dictionary<string, string[]>
+                    {
+                        ["lineItems"] =
+                        [$"Not enough stock for product {line.ProductId}. Requested {line.Amount}, available {stockItem.Quantity}."]
+                    });
+                }
+            }
+
+            var transaction = new Transaction
+            {
+                Type = TransactionType.Sale,
+                State = TransactionState.Reserved,
+                From = fromWarehouse,
+                To = toRecipient,
+                TrackingNumber = request.TrackingNumber?.Trim() ?? string.Empty
+            };
+
+            foreach (var line in mergedLineItems)
+            {
+                var stockItem = fromWarehouse.Inventory
+                    .First(i => i.ProductId == line.ProductId);
+
+                stockItem.Quantity -= line.Amount;
+                transaction.LineItems.Add(new TransactionLine(stockItem.Product, transaction, line.Amount));
+            }
+
+            await db.Transactions.AddAsync(transaction);
+            await db.SaveChangesAsync();
+
+            return TypedResults.Created($"/api/transactions/{transaction.Id}", transaction);
+        })
+    .WithName("CreateOrder");
+
 transactionsApi.MapDelete("/{id}", async Task<Results<Ok, NotFound>> (string id, AppDbContext db) =>
     await db.Transactions
         .Where(t => t.Id.ToString() == id)
@@ -239,6 +331,8 @@ app.Run();
 [JsonSerializable(typeof(TransactionLine))]
 [JsonSerializable(typeof(CreateProductRequest))]
 [JsonSerializable(typeof(UpdateProductRequest))]
+[JsonSerializable(typeof(CreateOrderRequest))]
+[JsonSerializable(typeof(OrderLineRequest))]
 internal partial class AppJsonSerializerContext : JsonSerializerContext
 {
 }
@@ -254,3 +348,13 @@ internal sealed record UpdateProductRequest(
     decimal Price,
     string? Barcode,
     string? Description);
+
+internal sealed record CreateOrderRequest(
+    Guid FromWarehouseId,
+    Guid ToRecipientId,
+    List<OrderLineRequest> LineItems,
+    string? TrackingNumber);
+
+internal sealed record OrderLineRequest(
+    Guid ProductId,
+    int Amount);

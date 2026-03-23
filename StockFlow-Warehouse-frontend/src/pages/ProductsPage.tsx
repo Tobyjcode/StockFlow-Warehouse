@@ -20,9 +20,28 @@ export default function ProductsPage() {
   const [barcode, setBarcode] = useState('')
   const [description, setDescription] = useState('')
 
+  const [search, setSearch] = useState('')
+  const [minPrice, setMinPrice] = useState('')
+  const [maxPrice, setMaxPrice] = useState('')
+  const [sort, setSort] = useState<'name' | 'price'>('name')
+  const [dir, setDir] = useState<'asc' | 'desc'>('asc')
+
+  function buildProductsUrl() {
+    const params = new URLSearchParams()
+
+    if (search.trim()) params.set('search', search.trim())
+    if (minPrice.trim()) params.set('minPrice', minPrice.trim())
+    if (maxPrice.trim()) params.set('maxPrice', maxPrice.trim())
+    params.set('sort', sort)
+    params.set('dir', dir)
+
+    const query = params.toString()
+    return query ? `/api/products?${query}` : '/api/products'
+  }
+
   async function loadProducts() {
     try {
-      const data = await getJson<Product[]>('/api/products')
+      const data = await getJson<Product[]>(buildProductsUrl())
       setItems(data)
       setError(null)
     } catch (err) {
@@ -35,7 +54,7 @@ export default function ProductsPage() {
 
     async function run() {
       try {
-        const data = await getJson<Product[]>('/api/products')
+        const data = await getJson<Product[]>(buildProductsUrl())
         if (mounted) setItems(data)
       } catch (err) {
         if (mounted) setError(err instanceof Error ? err.message : 'Unknown error')
@@ -76,6 +95,27 @@ export default function ProductsPage() {
     }
   }
 
+  async function handleApplyFilters(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault()
+    await loadProducts()
+  }
+
+  async function handleResetFilters() {
+    setSearch('')
+    setMinPrice('')
+    setMaxPrice('')
+    setSort('name')
+    setDir('asc')
+
+    try {
+      const data = await getJson<Product[]>('/api/products?sort=name&dir=asc')
+      setItems(data)
+      setError(null)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Unknown error')
+    }
+  }
+
   async function handleDelete(productId?: string) {
     if (!productId) return
 
@@ -94,6 +134,42 @@ export default function ProductsPage() {
       <h2>Products</h2>
 
       {error ? <p>Could not complete request: {error}</p> : null}
+
+      <form className="product-filters" onSubmit={handleApplyFilters}>
+        <input
+          value={search}
+          onChange={e => setSearch(e.target.value)}
+          placeholder="Search by name"
+        />
+        <input
+          value={minPrice}
+          onChange={e => setMinPrice(e.target.value)}
+          placeholder="Min price"
+          type="number"
+          min="0"
+          step="0.01"
+        />
+        <input
+          value={maxPrice}
+          onChange={e => setMaxPrice(e.target.value)}
+          placeholder="Max price"
+          type="number"
+          min="0"
+          step="0.01"
+        />
+        <select value={sort} onChange={e => setSort(e.target.value as 'name' | 'price')}>
+          <option value="name">Sort: Name</option>
+          <option value="price">Sort: Price</option>
+        </select>
+        <select value={dir} onChange={e => setDir(e.target.value as 'asc' | 'desc')}>
+          <option value="asc">Direction: Asc</option>
+          <option value="desc">Direction: Desc</option>
+        </select>
+        <button type="submit">Apply</button>
+        <button type="button" onClick={() => void handleResetFilters()}>
+          Reset
+        </button>
+      </form>
 
       <form className="product-form" onSubmit={handleCreate}>
         <input

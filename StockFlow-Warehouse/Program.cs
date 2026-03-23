@@ -56,8 +56,63 @@ using (var scope = app.Services.CreateScope())
 }
 
 var productApi = app.MapGroup("/api/products");
-productApi.MapGet("/", async (IProductRepository repo) =>
-        await repo.GetAll())
+productApi.MapGet("/",
+        async Task<Results<Ok<List<Product>>, BadRequest<string>>>
+        (string? search, decimal? minPrice, decimal? maxPrice, string? sort, string? dir, AppDbContext db) =>
+        {
+            if (minPrice is < 0 || maxPrice is < 0)
+            {
+                return TypedResults.BadRequest("minPrice and maxPrice must be 0 or greater.");
+            }
+
+            if (minPrice.HasValue && maxPrice.HasValue && minPrice > maxPrice)
+            {
+                return TypedResults.BadRequest("minPrice cannot be greater than maxPrice.");
+            }
+
+            var sortBy = (sort ?? "name").Trim().ToLowerInvariant();
+            var direction = (dir ?? "asc").Trim().ToLowerInvariant();
+
+            if (sortBy is not ("name" or "price"))
+            {
+                return TypedResults.BadRequest("sort must be 'name' or 'price'.");
+            }
+
+            if (direction is not ("asc" or "desc"))
+            {
+                return TypedResults.BadRequest("dir must be 'asc' or 'desc'.");
+            }
+
+            var query = db.Products
+                .Include(p => p.Categories)
+                .AsQueryable();
+
+            if (!string.IsNullOrWhiteSpace(search))
+            {
+                var term = search.Trim();
+                query = query.Where(p => p.Name.Contains(term));
+            }
+
+            if (minPrice.HasValue)
+            {
+                query = query.Where(p => p.Price >= minPrice.Value);
+            }
+
+            if (maxPrice.HasValue)
+            {
+                query = query.Where(p => p.Price <= maxPrice.Value);
+            }
+
+            query = (sortBy, direction) switch
+            {
+                ("price", "desc") => query.OrderByDescending(p => p.Price),
+                ("price", _) => query.OrderBy(p => p.Price),
+                ("name", "desc") => query.OrderByDescending(p => p.Name),
+                _ => query.OrderBy(p => p.Name)
+            };
+
+            return TypedResults.Ok(await query.ToListAsync());
+        })
     .WithName("GetProducts");
 
 

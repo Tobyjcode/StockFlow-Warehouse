@@ -6,16 +6,28 @@ import AuthPage from './pages/AuthPage'
 import WarehousesPage from './pages/WarehousesPage'
 
 function App() {
+  const navLinks = [
+    { to: '/', label: 'Home', icon: '🏠' },
+    { to: '/warehouses', label: 'Warehouses', icon: '🏢' },
+    { to: '/products', label: 'Products', icon: '📦' },
+    { to: '/orders', label: 'Orders', icon: '📋' },
+    { to: '/auth', label: 'Auth', icon: '🔐' },
+  ]
+
   return (
     <div className="container">
       <header className="topbar">
-        <h1>StockFlow</h1>
-        <nav>
-          <Link to="/">Home</Link>
-          <Link to="/warehouses">Warehouses</Link>
-          <Link to="/products">Products</Link>
-          <Link to="/orders">Orders</Link>
-          <Link to="/auth">Auth</Link>
+        <Link to="/" className="topbar-logo">
+          <span style={{ fontSize: '24px', marginRight: '8px' }}>📦</span>
+          <h1>StockFlow Warehouse</h1>
+        </Link>
+        <nav className="topbar-nav">
+          {navLinks.map(link => (
+            <Link key={link.to} to={link.to} className="nav-link">
+              <span className="nav-icon">{link.icon}</span>
+              <span className="nav-label">{link.label}</span>
+            </Link>
+          ))}
         </nav>
       </header>
 

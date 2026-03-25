@@ -9,7 +9,7 @@ export function clearAuthToken() {
   localStorage.removeItem(AUTH_TOKEN_KEY)
 }
 
-function getAuthToken(): string | null {
+export function getAuthToken(): string | null {
   return localStorage.getItem(AUTH_TOKEN_KEY)
 }
 

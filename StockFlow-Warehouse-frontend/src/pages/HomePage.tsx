@@ -85,29 +85,12 @@ export default function HomePage() {
   ]
 
   return (
-    <section style={{ textAlign: 'center', paddingTop: '40px', paddingBottom: '60px' }}>
-      <div style={{ marginBottom: '56px' }}>
-        <h1
-          style={{
-            fontSize: '72px',
-            fontWeight: 900,
-            margin: '0 0 8px 0',
-            paddingLeft: '24px',
-            paddingRight: '24px',
-            lineHeight: '1.2',
-            background: 'linear-gradient(135deg, #2563eb 0%, #7c3aed 100%)',
-            WebkitBackgroundClip: 'text',
-            WebkitTextFillColor: 'transparent',
-            backgroundClip: 'text',
-            letterSpacing: '-1px',
-            wordBreak: 'break-word',
-            overflowWrap: 'break-word',
-            width: '100%',
-          }}
-        >
+    <section className="home-page">
+      <div className="home-hero">
+        <h1>
           StockFlow Warehouse
         </h1>
-        <p style={{ fontSize: '18px', color: '#6b7280', margin: '0', letterSpacing: '0.5px', fontWeight: 500, width: '100%', wordBreak: 'break-word' }}>Modern Inventory Management System</p>
+        <p>Modern Inventory Management System</p>
       </div>
 
       {error ? (
@@ -123,7 +106,7 @@ export default function HomePage() {
       ) : null}
 
       {!isLoggedIn ? (
-        <div style={{ maxWidth: '480px', margin: '0 auto', marginBottom: '48px' }}>
+        <div className="home-auth-card" style={{ maxWidth: '480px', margin: '0 auto', marginBottom: '48px' }}>
           <p style={{ fontSize: '16px', color: '#4b5563', marginBottom: '24px', lineHeight: '1.6' }}>
             Welcome to StockFlow Warehouse. Start managing your inventory with our powerful warehouse management system.
           </p>
@@ -156,9 +139,10 @@ export default function HomePage() {
           <p style={{ fontSize: '13px', color: '#9ca3af', marginTop: '16px' }}>Or go to Auth page to register your own account</p>
         </div>
       ) : (
-        <div style={{ maxWidth: '800px', margin: '0 auto' }}>
+        <div className="home-nav-grid-wrapper" style={{ maxWidth: '800px', margin: '0 auto' }}>
           <p style={{ fontSize: '18px', fontWeight: 600, color: '#1f2937', marginBottom: '40px' }}>✓ You're logged in! Ready to manage inventory.</p>
           <div
+            className="home-nav-grid"
             style={{
               display: 'grid',
               gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',

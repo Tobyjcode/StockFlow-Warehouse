@@ -20,6 +20,6 @@ public class Recipient
     public string? PhoneNumber { get; set; }
     [MaxLength(50), EmailAddress]
     public string? Email { get; set; }
-    public required RecipientType Type { get; init; }
+    public required RecipientType Type { get; set; }
     public List<InventoryItem> Inventory { get; set; } = [];
 }

@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { getJson, postJson } from '../api'
+import { getJson, postJson, putJson, deleteJson } from '../api'
 
 type Warehouse = {
   id: string
@@ -49,6 +49,30 @@ type LineItemInput = {
   amount: number
 }
 
+const TRANSACTION_TYPES = ['sale', 'purchase', 'return', 'move'] as const
+const TRANSACTION_STATES = ['reserved', 'intransit', 'delivered', 'cancelled', 'returned'] as const
+
+type TransactionType = typeof TRANSACTION_TYPES[number]
+type TransactionState = typeof TRANSACTION_STATES[number]
+
+const STATE_TRANSITIONS: Record<TransactionState, TransactionState[]> = {
+  reserved: ['intransit', 'cancelled'],
+  intransit: ['delivered', 'cancelled'],
+  delivered: [],
+  cancelled: [],
+  returned: [],
+}
+
+function normalizeState(state: string): TransactionState | null {
+  const value = state.toLowerCase().replace(/[\s_-]/g, '')
+  if (value === 'reserved') return 'reserved'
+  if (value === 'intransit') return 'intransit'
+  if (value === 'delivered') return 'delivered'
+  if (value === 'cancelled') return 'cancelled'
+  if (value === 'returned') return 'returned'
+  return null
+}
+
 export default function OrdersPage() {
   const [orders, setOrders] = useState<Order[]>([])
   const [warehouses, setWarehouses] = useState<Warehouse[]>([])
@@ -59,11 +83,10 @@ export default function OrdersPage() {
   const [submitting, setSubmitting] = useState(false)
   const [ordersLoading, setOrdersLoading] = useState(false)
 
-  const [typeFilter, setTypeFilter] = useState<'all' | 'sale' | 'return'>('all')
-  const [stateFilter, setStateFilter] = useState<
-    'all' | 'reserved' | 'intransit' | 'delivered' | 'cancelled' | 'returned'
-  >('all')
+  const [typeFilter, setTypeFilter] = useState<'all' | TransactionType>('all')
+  const [stateFilter, setStateFilter] = useState<'all' | TransactionState>('all')
 
+  const [transactionType, setTransactionType] = useState<TransactionType>('sale')
   const [selectedWarehouse, setSelectedWarehouse] = useState('')
   const [selectedRecipient, setSelectedRecipient] = useState('')
   const [trackingNumber, setTrackingNumber] = useState('')
@@ -71,14 +94,18 @@ export default function OrdersPage() {
     { productId: '', amount: 1 },
   ])
 
+  const [stateUpdateId, setStateUpdateId] = useState<string | null>(null)
+  const [newState, setNewState] = useState<TransactionState>('intransit')
+  const [updatingState, setUpdatingState] = useState(false)
+
   function isAuthError(err: unknown) {
     return err instanceof Error && (err.message.startsWith('Unauthorized') || err.message.startsWith('Forbidden'))
   }
 
   function buildOrdersUrl() {
     const params = new URLSearchParams()
-    params.set('type', typeFilter)
-    params.set('state', stateFilter)
+    if (typeFilter !== 'all') params.set('type', typeFilter)
+    if (stateFilter !== 'all') params.set('state', stateFilter)
 
     return `/api/transactions/orders?${params.toString()}`
   }
@@ -165,6 +192,7 @@ export default function OrdersPage() {
       }
 
       const payload = {
+        type: transactionType,
         fromWarehouseId: selectedWarehouse,
         toRecipientId: selectedRecipient,
         lineItems: validLines,
@@ -184,13 +212,41 @@ export default function OrdersPage() {
     }
   }
 
+  async function handleUpdateState(orderId: string, newTransactionState: TransactionState) {
+    setUpdatingState(true)
+    setError(null)
+
+    try {
+      await putJson(`/api/transactions/orders/${orderId}`, {
+        state: newTransactionState,
+      })
+      await loadOrders()
+      setStateUpdateId(null)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Unknown error')
+    } finally {
+      setUpdatingState(false)
+    }
+  }
+
+  async function handleDeleteOrder(orderId: string) {
+    if (!confirm('Are you sure you want to delete this order?')) return
+
+    try {
+      await deleteJson(`/api/transactions/orders/${orderId}`)
+      await loadOrders()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Unknown error')
+    }
+  }
+
   async function handleResetOrderFilters() {
     setTypeFilter('all')
     setStateFilter('all')
 
     try {
       setOrdersLoading(true)
-      const data = await getJson<Order[]>('/api/transactions/orders?type=all&state=all')
+      const data = await getJson<Order[]>('/api/transactions/orders')
       setOrders(data)
       setError(null)
     } catch (err) {
@@ -207,13 +263,28 @@ export default function OrdersPage() {
 
   return (
     <section className="orders-page">
-      <h2>Orders</h2>
+      <h2>Transactions</h2>
 
       {error ? <p className="error">{error}</p> : null}
-      {authRequired ? <p className="error">Please log in on the Auth page before creating orders.</p> : null}
+      {authRequired ? <p className="error">Please log in on the Auth page before creating transactions.</p> : null}
 
       <form className="order-form" onSubmit={handleCreateOrder}>
-        <h3>Create Order</h3>
+        <h3>Create Transaction</h3>
+
+        <div className="form-group">
+          <label htmlFor="transactionType">Transaction Type</label>
+          <select
+            id="transactionType"
+            value={transactionType}
+            onChange={e => setTransactionType(e.target.value as TransactionType)}
+          >
+            {TRANSACTION_TYPES.map(type => (
+              <option key={type} value={type}>
+                {type.charAt(0).toUpperCase() + type.slice(1)}
+              </option>
+            ))}
+          </select>
+        </div>
 
         <div className="form-group">
           <label htmlFor="warehouse">From Warehouse</label>
@@ -305,11 +376,11 @@ export default function OrdersPage() {
         </fieldset>
 
         <button type="submit" disabled={submitting} className="btn-submit">
-          {submitting ? 'Creating...' : 'Create Order'}
+          {submitting ? 'Creating...' : 'Create Transaction'}
         </button>
       </form>
 
-      <h3>Recent Orders</h3>
+      <h3>Transactions</h3>
       <form
         className="order-filters"
         onSubmit={e => {
@@ -319,32 +390,25 @@ export default function OrdersPage() {
       >
         <select
           value={typeFilter}
-          onChange={e => setTypeFilter(e.target.value as 'all' | 'sale' | 'return')}
+          onChange={e => setTypeFilter(e.target.value as 'all' | TransactionType)}
         >
           <option value="all">Type: All</option>
-          <option value="sale">Type: Sale</option>
-          <option value="return">Type: Return</option>
+          {TRANSACTION_TYPES.map(type => (
+            <option key={type} value={type}>
+              Type: {type.charAt(0).toUpperCase() + type.slice(1)}
+            </option>
+          ))}
         </select>
         <select
           value={stateFilter}
-          onChange={e =>
-            setStateFilter(
-              e.target.value as
-                | 'all'
-                | 'reserved'
-                | 'intransit'
-                | 'delivered'
-                | 'cancelled'
-                | 'returned',
-            )
-          }
+          onChange={e => setStateFilter(e.target.value as 'all' | TransactionState)}
         >
           <option value="all">State: All</option>
-          <option value="reserved">State: Reserved</option>
-          <option value="intransit">State: InTransit</option>
-          <option value="delivered">State: Delivered</option>
-          <option value="cancelled">State: Cancelled</option>
-          <option value="returned">State: Returned</option>
+          {TRANSACTION_STATES.map(state => (
+            <option key={state} value={state}>
+              State: {state.charAt(0).toUpperCase() + state.slice(1)}
+            </option>
+          ))}
         </select>
         <button type="submit" disabled={ordersLoading}>
           {ordersLoading ? 'Loading...' : 'Apply'}
@@ -355,28 +419,87 @@ export default function OrdersPage() {
       </form>
 
       {orders.length === 0 ? (
-        <p>No orders yet.</p>
+        <p>No transactions yet.</p>
       ) : (
         <ul className="order-list">
-          {orders.map(order => (
-            <li key={order.id} className="order-item">
-              <div className="order-header">
-                <strong>Order {order.id.slice(0, 8)}</strong>
-                <span className="order-state">{order.state}</span>
-              </div>
-              <div className="order-details">
-                <p>
-                  {order.from?.name} → {order.to?.name}
-                </p>
-                <p className="order-items">
-                  {order.lineItems.length} item(s) • ${order.totalPrice.toFixed(2)}
-                </p>
-                {order.trackingNumber ? (
-                  <p className="tracking">Tracking: {order.trackingNumber}</p>
-                ) : null}
-              </div>
-            </li>
-          ))}
+          {orders.map(order => {
+            const normalizedState = normalizeState(order.state)
+            const availableTransitions = normalizedState ? STATE_TRANSITIONS[normalizedState] : []
+
+            return (
+              <li key={order.id} className="order-item">
+                <div className="order-header">
+                  <div>
+                    <strong>Transaction {order.id.slice(0, 8)}</strong>
+                    <span className="order-type">{order.type}</span>
+                  </div>
+                  <span className="order-state">{order.state}</span>
+                </div>
+                <div className="order-details">
+                  <p>
+                    {order.from?.name} → {order.to?.name}
+                  </p>
+                  <p className="order-items">
+                    {order.lineItems.length} item(s) • ${order.totalPrice.toFixed(2)}
+                  </p>
+                  {order.trackingNumber ? (
+                    <p className="tracking">Tracking: {order.trackingNumber}</p>
+                  ) : null}
+                </div>
+                <div className="order-actions">
+                  {stateUpdateId === order.id ? (
+                    <div className="state-update-form">
+                      <select
+                        value={newState}
+                        onChange={e => setNewState(e.target.value as TransactionState)}
+                      >
+                        {availableTransitions.map(s => (
+                          <option key={s} value={s}>
+                            {s}
+                          </option>
+                        ))}
+                      </select>
+                      <button
+                        type="button"
+                        onClick={() => void handleUpdateState(order.id, newState)}
+                        disabled={updatingState}
+                        className="btn-update"
+                      >
+                        {updatingState ? 'Updating...' : 'Update'}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setStateUpdateId(null)}
+                        className="btn-cancel"
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  ) : availableTransitions.length > 0 ? (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (availableTransitions.length > 0) {
+                          setStateUpdateId(order.id)
+                          setNewState(availableTransitions[0])
+                        }
+                      }}
+                      className="btn-state"
+                    >
+                      Update State
+                    </button>
+                  ) : null}
+                  <button
+                    type="button"
+                    onClick={() => void handleDeleteOrder(order.id)}
+                    className="btn-delete"
+                  >
+                    Delete
+                  </button>
+                </div>
+              </li>
+            )
+          })}
         </ul>
       )}
     </section>

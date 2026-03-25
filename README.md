@@ -18,10 +18,44 @@ It supports product management, warehouse inventory viewing, order creation with
 - .NET SDK 10
 - Node.js 20+
 - npm 10+
+- Docker Desktop (optional)
 
 ---
 
 ## 2) Quick start
+
+### Option A: Run with Docker
+
+From repo root:
+
+1. `docker compose up --build`
+2. Open frontend: `http://localhost:5173`
+3. API should be available on: `http://localhost:5212`
+
+Stop containers:
+
+- `docker compose down`
+
+### Option B: Run without Docker
+
+Open two terminals from repo root.
+
+Terminal 1 (backend):
+
+1. `dotnet restore`
+2. `dotnet run --project StockFlow-Warehouse/StockFlow-Warehouse.csproj`
+
+Terminal 2 (frontend):
+
+1. `cd StockFlow-Warehouse-frontend`
+2. `npm install`
+3. `npm run dev -- --host`
+
+Open: `http://localhost:5173`
+
+---
+
+## 3) Local run details (without Docker)
 
 ### Backend
 
@@ -38,13 +72,26 @@ In a second terminal:
 
 1. `cd StockFlow-Warehouse-frontend`
 2. `npm install`
-3. `npm run dev`
+3. `npm run dev -- --host`
 
 Frontend default URL: `http://localhost:5173`
 
+Using `--host` makes it available on your local network for mobile testing.
+
 ---
 
-## 3) Authentication and demo users
+## 4) Mobile test on same Wi-Fi
+
+1. Make sure your phone and PC are on the same Wi-Fi.
+2. Start the app with either Docker or non-Docker quick start.
+3. Find your PC IPv4 address (Windows): `ipconfig`.
+4. Open on phone: `http://<YOUR_PC_IP>:5173`
+
+If your phone cannot connect, allow Node/Vite and .NET through Windows Firewall.
+
+---
+
+## 5) Authentication and demo users
 
 Identity endpoints are enabled by backend startup (`/register`, `/login`, `/logout`).
 
@@ -65,7 +112,7 @@ Meaning:
 
 ---
 
-## 4) Main features
+## 6) Main features
 
 - Product CRUD (with validation)
 - Product filtering/sorting by name and price range
@@ -75,7 +122,7 @@ Meaning:
 
 ---
 
-## 5) API overview (selected)
+## 7) API overview (selected)
 
 ### Products
 
@@ -99,7 +146,7 @@ Meaning:
 
 ---
 
-## 6) Architecture (high-level)
+## 8) Architecture (high-level)
 
 ```mermaid
 flowchart LR
@@ -112,7 +159,7 @@ flowchart LR
 
 ---
 
-## 7) Domain model (simplified)
+## 9) Domain model (simplified)
 
 ```mermaid
 classDiagram
@@ -170,7 +217,7 @@ classDiagram
 
 ---
 
-## 8) Design choices and patterns
+## 10) Design choices and patterns
 
 - **Repository pattern** for product/warehouse data access
 - **DTO/request records** for API input validation
@@ -179,7 +226,7 @@ classDiagram
 
 ---
 
-## 9) Testing
+## 11) Testing
 
 Test project: `TestWarehouse`
 
@@ -191,7 +238,18 @@ Current tests focus mainly on repository behavior. Next recommended tests are AP
 
 ---
 
-## 10) Known development note
+## 12) Public deploy (optional)
+
+If you need a public link without Docker:
+
+1. Deploy backend to Render as a .NET Web Service.
+2. Deploy frontend to Vercel.
+3. Set frontend API base URL to your Render backend URL.
+4. Ensure CORS allows your Vercel domain.
+
+---
+
+## 13) Known development note
 
 In development, startup currently deletes and recreates DB (`EnsureDeletedAsync()`), so data resets on restart.
 

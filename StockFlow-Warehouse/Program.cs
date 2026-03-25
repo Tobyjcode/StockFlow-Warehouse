@@ -321,13 +321,12 @@ transactionsApi.MapGet("/orders",
             var typeFilter = (type ?? "all").Trim().ToLowerInvariant();
             var stateFilter = (state ?? "all").Trim().ToLowerInvariant();
 
-            if (typeFilter is not ("all" or "sale" or "return"))
+            if (typeFilter is not ("all" or "sale" or "return" or "purchase" or "move"))
             {
-                return TypedResults.BadRequest("type must be 'all', 'sale', or 'return'.");
+                return TypedResults.BadRequest("type must be 'all', 'sale', 'return', 'purchase', or 'move'.");
             }
 
             var query = db.Transactions
-                .Where(t => t.Type == TransactionType.Sale || t.Type == TransactionType.Return)
                 .Include(t => t.From)
                 .Include(t => t.To)
                 .Include(t => t.LineItems)
@@ -338,6 +337,8 @@ transactionsApi.MapGet("/orders",
             {
                 "sale" => query.Where(t => t.Type == TransactionType.Sale),
                 "return" => query.Where(t => t.Type == TransactionType.Return),
+                "purchase" => query.Where(t => t.Type == TransactionType.Purchase),
+                "move" => query.Where(t => t.Type == TransactionType.Move),
                 _ => query,
             };
 
@@ -448,13 +449,56 @@ transactionsApi.MapPost("/orders",
     .RequireAuthorization("ManagerOrAdmin")
     .WithName("CreateOrder");
 
-transactionsApi.MapDelete("/{id}", async Task<Results<Ok, NotFound>> (string id, AppDbContext db) =>
-    await db.Transactions
-        .Where(t => t.Id.ToString() == id)
-        .FirstOrDefaultAsync()
-        is not null ? TypedResults.Ok() : TypedResults.NotFound())
+transactionsApi.MapPut("/orders/{id}",
+        async Task<Results<Ok<Transaction>, NotFound, ValidationProblem>>
+        (string id, UpdateOrderStateRequest request, AppDbContext db) =>
+        {
+            if (!Guid.TryParse(id, out var guid))
+            {
+                return TypedResults.NotFound();
+            }
+
+            var existing = await db.Transactions.FirstOrDefaultAsync(t => t.Id == guid);
+            if (existing is null)
+            {
+                return TypedResults.NotFound();
+            }
+
+            if (!Enum.TryParse<TransactionState>(request.State, true, out var parsedState))
+            {
+                return TypedResults.ValidationProblem(new Dictionary<string, string[]>
+                {
+                    ["state"] = ["Invalid state."]
+                });
+            }
+
+            existing.State = parsedState;
+            await db.SaveChangesAsync();
+
+            return TypedResults.Ok(existing);
+        })
     .RequireAuthorization("ManagerOrAdmin")
-    .WithName("DeleteTransaction");
+    .WithName("UpdateOrder");
+
+transactionsApi.MapDelete("/orders/{id}", async Task<Results<Ok, NotFound>> (string id, AppDbContext db) =>
+    {
+        if (!Guid.TryParse(id, out var guid))
+        {
+            return TypedResults.NotFound();
+        }
+
+        var transaction = await db.Transactions.FirstOrDefaultAsync(t => t.Id == guid);
+        if (transaction is null)
+        {
+            return TypedResults.NotFound();
+        }
+
+        db.Transactions.Remove(transaction);
+        await db.SaveChangesAsync();
+        return TypedResults.Ok();
+    })
+    .RequireAuthorization("ManagerOrAdmin")
+    .WithName("DeleteOrder");
 
 app.Run();
 
@@ -468,6 +512,7 @@ app.Run();
 [JsonSerializable(typeof(UpdateProductRequest))]
 [JsonSerializable(typeof(CreateOrderRequest))]
 [JsonSerializable(typeof(OrderLineRequest))]
+[JsonSerializable(typeof(UpdateOrderStateRequest))]
 internal partial class AppJsonSerializerContext : JsonSerializerContext
 {
 }
@@ -493,3 +538,5 @@ internal sealed record CreateOrderRequest(
 internal sealed record OrderLineRequest(
     Guid ProductId,
     int Amount);
+
+internal sealed record UpdateOrderStateRequest(string State);

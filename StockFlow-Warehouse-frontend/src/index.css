@@ -193,11 +193,31 @@ a {
   display: flex;
   justify-content: space-between;
   align-items: center;
+  flex-wrap: wrap;
   border: 1px solid #e5e7eb;
   border-radius: 10px;
   padding: 10px 12px;
   background: white;
   gap: 12px;
+}
+
+.product-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.product-edit {
+  width: 100%;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 8px;
+}
+
+.product-edit input {
+  font: inherit;
+  padding: 8px 10px;
+  border-radius: 8px;
+  border: 1px solid #d1d5db;
 }
 
 .product-meta {
@@ -216,6 +236,27 @@ a {
   border-radius: 10px;
   padding: 16px;
   background: #f9fafb;
+}
+
+.order-filters {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 8px;
+}
+
+.order-filters select,
+.order-filters button {
+  font: inherit;
+  padding: 8px 10px;
+  border-radius: 8px;
+  border: 1px solid #d1d5db;
+}
+
+.order-filters button {
+  cursor: pointer;
+  background: #2563eb;
+  color: white;
+  border-color: #1d4ed8;
 }
 
 .order-form h3 {
@@ -402,4 +443,88 @@ a {
   background: #dcfce7;
   border: 1px solid #86efac;
   color: #166534;
+}
+
+.warehouses-page {
+  display: grid;
+  gap: 12px;
+}
+
+.warehouse-filters {
+  display: grid;
+  grid-template-columns: 1fr auto auto;
+  gap: 8px;
+}
+
+.warehouse-filters input,
+.warehouse-filters select {
+  font: inherit;
+  padding: 8px 10px;
+  border-radius: 8px;
+  border: 1px solid #d1d5db;
+}
+
+.warehouse-checkbox {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 14px;
+}
+
+.warehouse-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 10px;
+}
+
+.warehouse-card {
+  border: 1px solid #e5e7eb;
+  border-radius: 10px;
+  padding: 12px;
+  background: white;
+  display: grid;
+  gap: 8px;
+}
+
+.warehouse-card h3 {
+  margin: 0;
+}
+
+.warehouse-address {
+  color: #6b7280;
+  font-size: 14px;
+}
+
+.inventory-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 6px;
+}
+
+.inventory-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  padding: 6px 8px;
+}
+
+.stock-pill {
+  min-width: 32px;
+  text-align: center;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 12px;
+  background: #dcfce7;
+  color: #166534;
+  border: 1px solid #86efac;
+}
+
+.stock-pill.low {
+  background: #fee2e2;
+  color: #991b1b;
+  border-color: #fecaca;
 }

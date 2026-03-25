@@ -57,6 +57,12 @@ export default function OrdersPage() {
   const [error, setError] = useState<string | null>(null)
   const [authRequired, setAuthRequired] = useState(false)
   const [submitting, setSubmitting] = useState(false)
+  const [ordersLoading, setOrdersLoading] = useState(false)
+
+  const [typeFilter, setTypeFilter] = useState<'all' | 'sale' | 'return'>('all')
+  const [stateFilter, setStateFilter] = useState<
+    'all' | 'reserved' | 'intransit' | 'delivered' | 'cancelled' | 'returned'
+  >('all')
 
   const [selectedWarehouse, setSelectedWarehouse] = useState('')
   const [selectedRecipient, setSelectedRecipient] = useState('')
@@ -69,11 +75,32 @@ export default function OrdersPage() {
     return err instanceof Error && (err.message.startsWith('Unauthorized') || err.message.startsWith('Forbidden'))
   }
 
+  function buildOrdersUrl() {
+    const params = new URLSearchParams()
+    params.set('type', typeFilter)
+    params.set('state', stateFilter)
+
+    return `/api/transactions/orders?${params.toString()}`
+  }
+
+  async function loadOrders() {
+    try {
+      setOrdersLoading(true)
+      const ordersData = await getJson<Order[]>(buildOrdersUrl())
+      setOrders(ordersData)
+      setError(null)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Unknown error')
+    } finally {
+      setOrdersLoading(false)
+    }
+  }
+
   useEffect(() => {
     async function load() {
       try {
         const [ordersData, warehousesData] = await Promise.all([
-          getJson<Order[]>('/api/transactions/orders'),
+          getJson<Order[]>(buildOrdersUrl()),
           getJson<Warehouse[]>('/api/warehouses'),
         ])
         setOrders(ordersData)
@@ -144,8 +171,8 @@ export default function OrdersPage() {
         trackingNumber: trackingNumber || null,
       }
 
-      const created = await postJson<Order>('/api/transactions/orders', payload)
-      setOrders(prev => [created, ...prev])
+      await postJson<Order>('/api/transactions/orders', payload)
+      await loadOrders()
       setLineItems([{ productId: '', amount: 1 }])
       setTrackingNumber('')
       setAuthRequired(false)
@@ -154,6 +181,22 @@ export default function OrdersPage() {
       setAuthRequired(isAuthError(err))
     } finally {
       setSubmitting(false)
+    }
+  }
+
+  async function handleResetOrderFilters() {
+    setTypeFilter('all')
+    setStateFilter('all')
+
+    try {
+      setOrdersLoading(true)
+      const data = await getJson<Order[]>('/api/transactions/orders?type=all&state=all')
+      setOrders(data)
+      setError(null)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Unknown error')
+    } finally {
+      setOrdersLoading(false)
     }
   }
 
@@ -267,6 +310,50 @@ export default function OrdersPage() {
       </form>
 
       <h3>Recent Orders</h3>
+      <form
+        className="order-filters"
+        onSubmit={e => {
+          e.preventDefault()
+          void loadOrders()
+        }}
+      >
+        <select
+          value={typeFilter}
+          onChange={e => setTypeFilter(e.target.value as 'all' | 'sale' | 'return')}
+        >
+          <option value="all">Type: All</option>
+          <option value="sale">Type: Sale</option>
+          <option value="return">Type: Return</option>
+        </select>
+        <select
+          value={stateFilter}
+          onChange={e =>
+            setStateFilter(
+              e.target.value as
+                | 'all'
+                | 'reserved'
+                | 'intransit'
+                | 'delivered'
+                | 'cancelled'
+                | 'returned',
+            )
+          }
+        >
+          <option value="all">State: All</option>
+          <option value="reserved">State: Reserved</option>
+          <option value="intransit">State: InTransit</option>
+          <option value="delivered">State: Delivered</option>
+          <option value="cancelled">State: Cancelled</option>
+          <option value="returned">State: Returned</option>
+        </select>
+        <button type="submit" disabled={ordersLoading}>
+          {ordersLoading ? 'Loading...' : 'Apply'}
+        </button>
+        <button type="button" onClick={() => void handleResetOrderFilters()} disabled={ordersLoading}>
+          Reset
+        </button>
+      </form>
+
       {orders.length === 0 ? (
         <p>No orders yet.</p>
       ) : (

@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { deleteJson, getJson, postJson } from '../api'
+import { deleteJson, getJson, postJson, putJson } from '../api'
 
 type Product = {
   id?: string
@@ -15,13 +15,22 @@ export default function ProductsPage() {
   const [error, setError] = useState<string | null>(null)
   const [authRequired, setAuthRequired] = useState(false)
   const [submitting, setSubmitting] = useState(false)
+  const [savingEdit, setSavingEdit] = useState(false)
 
   const [name, setName] = useState('')
   const [price, setPrice] = useState('0')
   const [barcode, setBarcode] = useState('')
   const [description, setDescription] = useState('')
 
+  const [editingId, setEditingId] = useState<string | null>(null)
+  const [editName, setEditName] = useState('')
+  const [editPrice, setEditPrice] = useState('0')
+  const [editBarcode, setEditBarcode] = useState('')
+  const [editDescription, setEditDescription] = useState('')
+
   const [search, setSearch] = useState('')
+  const [category, setCategory] = useState('')
+  const [stockStatus, setStockStatus] = useState<'all' | 'in-stock' | 'low-stock' | 'out-of-stock'>('all')
   const [minPrice, setMinPrice] = useState('')
   const [maxPrice, setMaxPrice] = useState('')
   const [sort, setSort] = useState<'name' | 'price'>('name')
@@ -35,6 +44,8 @@ export default function ProductsPage() {
     const params = new URLSearchParams()
 
     if (search.trim()) params.set('search', search.trim())
+    if (category.trim()) params.set('category', category.trim())
+    params.set('stockStatus', stockStatus)
     if (minPrice.trim()) params.set('minPrice', minPrice.trim())
     if (maxPrice.trim()) params.set('maxPrice', maxPrice.trim())
     params.set('sort', sort)
@@ -111,6 +122,8 @@ export default function ProductsPage() {
 
   async function handleResetFilters() {
     setSearch('')
+    setCategory('')
+    setStockStatus('all')
     setMinPrice('')
     setMaxPrice('')
     setSort('name')
@@ -140,6 +153,48 @@ export default function ProductsPage() {
     }
   }
 
+  function startEdit(product: Product) {
+    if (!product.id) return
+
+    setEditingId(product.id)
+    setEditName(product.name)
+    setEditPrice(String(product.price))
+    setEditBarcode(product.barcode ?? '')
+    setEditDescription(product.description ?? '')
+    setError(null)
+  }
+
+  function cancelEdit() {
+    setEditingId(null)
+    setEditName('')
+    setEditPrice('0')
+    setEditBarcode('')
+    setEditDescription('')
+  }
+
+  async function saveEdit(productId: string) {
+    setSavingEdit(true)
+    setError(null)
+
+    try {
+      const updated = await putJson<Product>(`/api/products/${productId}`, {
+        name: editName,
+        price: Number(editPrice),
+        barcode: editBarcode,
+        description: editDescription,
+      })
+
+      setItems(prev => prev.map(p => (p.id === productId ? updated : p)))
+      cancelEdit()
+      setAuthRequired(false)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Unknown error')
+      setAuthRequired(isAuthError(err))
+    } finally {
+      setSavingEdit(false)
+    }
+  }
+
   if (loading) return <p>Loading products...</p>
 
   return (
@@ -155,6 +210,22 @@ export default function ProductsPage() {
           onChange={e => setSearch(e.target.value)}
           placeholder="Search by name"
         />
+        <input
+          value={category}
+          onChange={e => setCategory(e.target.value)}
+          placeholder="Filter by category"
+        />
+        <select
+          value={stockStatus}
+          onChange={e =>
+            setStockStatus(e.target.value as 'all' | 'in-stock' | 'low-stock' | 'out-of-stock')
+          }
+        >
+          <option value="all">Stock: All</option>
+          <option value="in-stock">Stock: In stock</option>
+          <option value="low-stock">Stock: Low stock</option>
+          <option value="out-of-stock">Stock: Out of stock</option>
+        </select>
         <input
           value={minPrice}
           onChange={e => setMinPrice(e.target.value)}
@@ -233,9 +304,59 @@ export default function ProductsPage() {
                   {p.description ? ` • ${p.description}` : ''}
                 </div>
               </div>
-              <button type="button" onClick={() => handleDelete(p.id)}>
-                Delete
-              </button>
+              <div className="product-actions">
+                <button type="button" onClick={() => startEdit(p)} disabled={!p.id || savingEdit}>
+                  Edit
+                </button>
+                <button type="button" onClick={() => handleDelete(p.id)} disabled={savingEdit}>
+                  Delete
+                </button>
+              </div>
+
+              {editingId === p.id ? (
+                <div className="product-edit">
+                  <input
+                    value={editName}
+                    onChange={e => setEditName(e.target.value)}
+                    placeholder="Name"
+                    required
+                    maxLength={100}
+                  />
+                  <input
+                    value={editPrice}
+                    onChange={e => setEditPrice(e.target.value)}
+                    placeholder="Price"
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    required
+                  />
+                  <input
+                    value={editBarcode}
+                    onChange={e => setEditBarcode(e.target.value)}
+                    placeholder="Barcode"
+                    maxLength={14}
+                  />
+                  <input
+                    value={editDescription}
+                    onChange={e => setEditDescription(e.target.value)}
+                    placeholder="Description"
+                    maxLength={1200}
+                  />
+                  <div className="product-actions">
+                    <button
+                      type="button"
+                      onClick={() => p.id && void saveEdit(p.id)}
+                      disabled={savingEdit}
+                    >
+                      {savingEdit ? 'Saving...' : 'Save'}
+                    </button>
+                    <button type="button" onClick={cancelEdit} disabled={savingEdit}>
+                      Cancel
+                    </button>
+                  </div>
+                </div>
+              ) : null}
             </li>
           ))}
         </ul>
